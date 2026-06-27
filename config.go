@@ -72,6 +72,18 @@ type Config struct {
 	// Transport for stdio transport configuration.
 	Transport mcp.Transport
 
+	// OnServer, if set, is called with the fully-built MCP server immediately
+	// before it starts serving (after all command-derived tools are
+	// registered, before Run/ListenAndServe). It is the seam for advanced
+	// integrations that need the *mcp.Server beyond reflected Cobra tools —
+	// e.g. registering custom JSON-RPC methods, additional hand-written tools,
+	// or capturing the server to push server→client notifications via its
+	// sessions (a Claude Code "channel"). The capability set itself is
+	// declared through ServerOptions; this hook is for the runtime handle.
+	// The context is the serving context (cancelled on shutdown), suitable
+	// for tying a background push loop to the server's lifetime.
+	OnServer func(context.Context, *mcp.Server)
+
 	server         *mcp.Server
 	tools          []*mcp.Tool
 	toolNamePrefix string // resolved prefix (either ToolNamePrefix or root command name)
@@ -91,11 +103,17 @@ func (c *Config) serveStdio(cmd *cobra.Command) error {
 	}
 
 	c.registerTools(cmd)
+	if c.OnServer != nil {
+		c.OnServer(cmd.Context(), c.server)
+	}
 	return c.server.Run(cmd.Context(), c.Transport)
 }
 
 func (c *Config) serveHTTP(cmd *cobra.Command, addr string) error {
 	c.registerTools(cmd)
+	if c.OnServer != nil {
+		c.OnServer(cmd.Context(), c.server)
+	}
 
 	// Create the streamable HTTP handler.
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
