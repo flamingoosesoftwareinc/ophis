@@ -7,10 +7,130 @@ import (
 	"testing"
 
 	"github.com/njayp/ophis/internal/cfgmgr/manager/claude"
+	"github.com/njayp/ophis/internal/cfgmgr/manager/claudecode"
 	"github.com/njayp/ophis/internal/cfgmgr/manager/vscode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestClaudeCodeManager(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".mcp.json")
+
+	t.Run("NewClaudeCodeManager creates empty config", func(t *testing.T) {
+		m, err := NewClaudeCodeManager(configPath)
+		require.NoError(t, err)
+		assert.NotNil(t, m)
+		assert.Equal(t, configPath, m.configPath)
+	})
+
+	t.Run("EnableServer writes .mcp.json with server entry", func(t *testing.T) {
+		m, err := NewClaudeCodeManager(configPath)
+		require.NoError(t, err)
+
+		server := claudecode.Server{
+			Type:    "stdio",
+			Command: "/usr/local/bin/myapp",
+			Args:    []string{"mcp", "start"},
+		}
+
+		err = m.EnableServer("test-server", server)
+		require.NoError(t, err)
+
+		// Verify the server was added in memory
+		assert.True(t, m.config.HasServer("test-server"))
+
+		// Verify the config was persisted
+		data, err := os.ReadFile(configPath)
+		require.NoError(t, err)
+
+		var savedConfig claudecode.Config
+		err = json.Unmarshal(data, &savedConfig)
+		require.NoError(t, err)
+		assert.True(t, savedConfig.HasServer("test-server"))
+	})
+
+	t.Run("EnableServer second server preserves first", func(t *testing.T) {
+		cleanPath := filepath.Join(tmpDir, ".mcp_merge.json")
+
+		m, err := NewClaudeCodeManager(cleanPath)
+		require.NoError(t, err)
+
+		first := claudecode.Server{
+			Type:    "stdio",
+			Command: "/usr/local/bin/first",
+			Args:    []string{"mcp", "start"},
+		}
+		err = m.EnableServer("first-server", first)
+		require.NoError(t, err)
+
+		// Reload and add second server — simulates a fresh invocation
+		m2, err := NewClaudeCodeManager(cleanPath)
+		require.NoError(t, err)
+
+		second := claudecode.Server{
+			Type:    "stdio",
+			Command: "/usr/local/bin/second",
+			Args:    []string{"mcp", "start"},
+		}
+		err = m2.EnableServer("second-server", second)
+		require.NoError(t, err)
+
+		// Reload and verify both servers are present (merge, not clobber)
+		m3, err := NewClaudeCodeManager(cleanPath)
+		require.NoError(t, err)
+		assert.True(t, m3.config.HasServer("first-server"), "first server must be preserved")
+		assert.True(t, m3.config.HasServer("second-server"), "second server must be present")
+	})
+
+	t.Run("DisableServer removes existing server", func(t *testing.T) {
+		m, err := NewClaudeCodeManager(configPath)
+		require.NoError(t, err)
+
+		server := claudecode.Server{
+			Command: "/usr/local/bin/myapp",
+			Args:    []string{"mcp", "start"},
+		}
+
+		err = m.EnableServer("to-remove", server)
+		require.NoError(t, err)
+
+		err = m.DisableServer("to-remove")
+		require.NoError(t, err)
+
+		assert.False(t, m.config.HasServer("to-remove"))
+
+		// Reload and verify persistence
+		m2, err := NewClaudeCodeManager(configPath)
+		require.NoError(t, err)
+		assert.False(t, m2.config.HasServer("to-remove"))
+	})
+
+	t.Run("DisableServer handles non-existent server", func(t *testing.T) {
+		m, err := NewClaudeCodeManager(configPath)
+		require.NoError(t, err)
+
+		err = m.DisableServer("non-existent")
+		require.NoError(t, err)
+	})
+
+	t.Run("loadConfig handles missing file", func(t *testing.T) {
+		nonExistentPath := filepath.Join(tmpDir, "non-existent.json")
+		m, err := NewClaudeCodeManager(nonExistentPath)
+		require.NoError(t, err)
+		assert.NotNil(t, m)
+	})
+
+	t.Run("loadConfig handles invalid JSON", func(t *testing.T) {
+		invalidPath := filepath.Join(tmpDir, "invalid_claudecode.json")
+		err := os.WriteFile(invalidPath, []byte("not valid json"), 0o644)
+		require.NoError(t, err)
+
+		_, err = NewClaudeCodeManager(invalidPath)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid JSON format")
+	})
+}
 
 func TestClaudeManager(t *testing.T) {
 	// Create a temporary directory for test configs

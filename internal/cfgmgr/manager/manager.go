@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/njayp/ophis/internal/cfgmgr/manager/claude"
+	"github.com/njayp/ophis/internal/cfgmgr/manager/claudecode"
 	"github.com/njayp/ophis/internal/cfgmgr/manager/cursor"
 	"github.com/njayp/ophis/internal/cfgmgr/manager/vscode"
 )
@@ -60,6 +61,22 @@ func NewCursorManager(configPath string, workspace bool) (*Manager[cursor.Server
 
 	m := &Manager[cursor.Server, *cursor.Config]{
 		config:     &cursor.Config{},
+		configPath: configPath,
+	}
+
+	return m, m.loadConfig()
+}
+
+// NewClaudeCodeManager creates a new Manager configured for Claude Code MCP servers.
+// Claude Code reads project-level MCP servers from .mcp.json in the current working directory.
+// If configPath is empty, defaults to claudecode.ConfigPath() (.mcp.json in cwd).
+func NewClaudeCodeManager(configPath string) (*Manager[claudecode.Server, *claudecode.Config], error) {
+	if configPath == "" {
+		configPath = claudecode.ConfigPath()
+	}
+
+	m := &Manager[claudecode.Server, *claudecode.Config]{
+		config:     &claudecode.Config{},
 		configPath: configPath,
 	}
 

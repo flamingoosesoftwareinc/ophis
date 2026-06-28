@@ -2,6 +2,7 @@ package ophis
 
 import (
 	"github.com/njayp/ophis/internal/cfgmgr/cmd/claude"
+	claudecode "github.com/njayp/ophis/internal/cfgmgr/cmd/claudecode"
 	"github.com/njayp/ophis/internal/cfgmgr/cmd/cursor"
 	"github.com/njayp/ophis/internal/cfgmgr/cmd/vscode"
 	"github.com/spf13/cobra"
@@ -29,6 +30,7 @@ func Command(config *Config) *cobra.Command {
 		toolCommand(config),
 		streamCommand(config),
 		claude.Command(name, defaultEnv),
+		claudecode.Command(name, defaultEnv),
 		vscode.Command(name, defaultEnv),
 		cursor.Command(name, defaultEnv),
 	)
